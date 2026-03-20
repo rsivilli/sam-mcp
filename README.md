@@ -10,7 +10,7 @@ An MCP server for accessing [SAM.gov](https://sam.gov) APIs, built with [FastMCP
 ## Setup
 
 ```bash
-git clone https://github.com/your-org/sam-mcp
+git clone https://github.com/rsivilli/sam-mcp
 cd sam-mcp
 cp .env.example .env
 ```
