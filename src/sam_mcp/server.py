@@ -165,6 +165,76 @@ async def search_exclusions(
     return response.json()
 
 
+@mcp.tool()
+async def search_subawards(
+    prime_uei: Annotated[
+        Optional[str],
+        Field(description="UEI of the prime contractor — returns their subcontractors"),
+    ] = None,
+    sub_uei: Annotated[
+        Optional[str],
+        Field(
+            description="UEI of the subcontractor — returns primes they worked under"
+        ),
+    ] = None,
+    prime_award_id: Annotated[
+        Optional[str],
+        Field(
+            description="Prime contract/award ID to scope results to a specific contract"
+        ),
+    ] = None,
+    page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
+    page_size: Annotated[
+        int, Field(description="Results per page (max 100)", ge=1, le=100)
+    ] = 10,
+) -> dict:
+    """Search FSRS subcontract reports. Use prime_uei to find a company's subcontractors,
+    or sub_uei to find the prime contractors a company has worked under."""
+    params = _params(
+        primeEntityUEI=prime_uei,
+        subEntityUEI=sub_uei,
+        primeAwardKey=prime_award_id,
+        page=page,
+        pageSize=page_size,
+    )
+    response = await _get_client().get("/contract-data/v2/subAwards", params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+@mcp.tool()
+async def get_company_partners(
+    uei: Annotated[str, Field(description="UEI of the company to look up")],
+    page_size: Annotated[
+        int,
+        Field(description="Results per page for each query (max 100)", ge=1, le=100),
+    ] = 25,
+) -> dict:
+    """Return a unified view of a company's subcontract partnerships:
+    - as_prime: companies they have brought on as subcontractors
+    - as_sub: prime contractors they have worked under"""
+    import asyncio
+
+    prime_resp, sub_resp = await asyncio.gather(
+        _get_client().get(
+            "/contract-data/v2/subAwards",
+            params=_params(primeEntityUEI=uei, pageSize=page_size),
+        ),
+        _get_client().get(
+            "/contract-data/v2/subAwards",
+            params=_params(subEntityUEI=uei, pageSize=page_size),
+        ),
+    )
+    prime_resp.raise_for_status()
+    sub_resp.raise_for_status()
+
+    return {
+        "uei": uei,
+        "as_prime": prime_resp.json(),
+        "as_sub": sub_resp.json(),
+    }
+
+
 def main_stdio():
     mcp.run(transport="stdio")
 
