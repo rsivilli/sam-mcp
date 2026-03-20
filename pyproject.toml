@@ -1,0 +1,26 @@
+[project]
+name = "sam-mcp"
+version = "0.1.0"
+description = "MCP server for accessing SAM.gov APIs"
+authors = [
+    { name = "Robert Sivilli", email = "robert.sivilli@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp>=3.1.1",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.13.1",
+]
+
+[project.scripts]
+sam-mcp = "sam_mcp.server:main_stdio"
+sam-mcp-http = "sam_mcp.server:main_http"
+
+[build-system]
+requires = ["uv_build>=0.10.9,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+]
