@@ -38,5 +38,9 @@ jobs:
           name: dist
           path: dist/
 
+      - uses: astral-sh/setup-uv@v5
+
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypa-publish@release/v1
+        run: uv publish
+        env:
+          UV_PUBLISH_TRUSTED_PUBLISHING: always
