@@ -55,12 +55,49 @@ Add the following to your `claude_desktop_config.json`:
 
 ## Available tools
 
+### Entity & registration
+
 | Tool | Description |
 |---|---|
 | `search_entities` | Search registered entities (vendors/organizations) by name, UEI, CAGE code, state, country, or registration status |
 | `get_entity` | Get full details for a specific entity by UEI |
-| `search_opportunities` | Search contract opportunities/solicitations by keyword, NAICS code, set-aside type, date range, and more |
+| `resolve_company` | Resolve a company name to its SAM.gov entity record and UEI — returns the single best match |
+
+### Opportunities & exclusions
+
+| Tool | Description |
+|---|---|
+| `search_opportunities` | Search contract opportunities/solicitations by keyword, NAICS code, set-aside type, date range, and more. `postedFrom` and `postedTo` are required. |
 | `search_exclusions` | Search for debarred or suspended parties by name, UEI, or CAGE code |
+
+### Contract awards
+
+| Tool | Description |
+|---|---|
+| `search_contract_awards` | Search FPDS contract award records by recipient UEI, agency, NAICS code, date range, or dollar amount |
+| `get_similar_awards` | Given a contract PIID, find other awarded contracts with the same NAICS code, awarding agency, and set-aside type |
+
+### Company intelligence
+
+| Tool | Description |
+|---|---|
+| `get_company_profile` | Full profile of a company: entity registration, contract awards, and subcontract partnerships in a single call |
+| `get_company_partners` | Unified view of a company's subcontract relationships — as prime contractor and as subcontractor |
+| `find_competitors` | Find companies registered under the same NAICS codes as a given entity |
+| `search_subawards` | Search FSRS subcontract reports by prime contract ID or award key |
+
+## API rate limits
+
+Rate limits are per API key per day and reset at midnight UTC.
+
+| User type | Daily limit |
+|---|---|
+| Non-federal (no SAM.gov role) | 10 requests/day |
+| Non-federal (with SAM.gov role) | 1,000 requests/day |
+| Federal personal key | 1,000 requests/day |
+| Federal system account | 10,000 requests/day |
+
+For production use, a **system account** key is recommended. Apply through your SAM.gov account settings.
 
 ## Development
 
