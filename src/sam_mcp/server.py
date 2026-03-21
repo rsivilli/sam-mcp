@@ -48,7 +48,7 @@ async def search_entities(
     ] = None,
     page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
     page_size: Annotated[
-        int, Field(description="Results per page (max 100)", ge=1, le=100)
+        int, Field(description="Results per page (max 10)", ge=1, le=10)
     ] = 10,
 ) -> dict:
     """Search for registered entities (vendors/organizations) in SAM.gov."""
@@ -56,12 +56,11 @@ async def search_entities(
         ueiSAM=uei,
         legalBusinessName=legal_business_name,
         cageCode=cage_code,
-        physicalAddressStateOrProvinceCode=state,
+        physicalAddressProvinceOrStateCode=state,
         physicalAddressCountryCode=country,
-        samRegistered="Yes",
         registrationStatus=registration_status,
         page=page,
-        pageSize=page_size,
+        size=page_size,
     )
     response = await _get_client().get("/entity-information/v3/entities", params=params)
     response.raise_for_status()
@@ -116,11 +115,11 @@ async def search_opportunities(
     """Search for contract opportunities (solicitations) on SAM.gov."""
     params = _params(
         q=keyword,
-        optype=opportunity_type,
+        ptype=opportunity_type,
         postedFrom=posted_from,
         postedTo=posted_to,
         ncode=naics_code,
-        setAside=set_aside_code,
+        typeOfSetAside=set_aside_code,
         state=state,
         limit=limit,
         offset=offset,
@@ -149,7 +148,7 @@ async def search_exclusions(
     ] = None,
     page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
     page_size: Annotated[
-        int, Field(description="Results per page (max 100)", ge=1, le=100)
+        int, Field(description="Results per page (max 10)", ge=1, le=10)
     ] = 10,
 ) -> dict:
     """Search for excluded parties (debarred/suspended entities) on SAM.gov."""
@@ -160,9 +159,11 @@ async def search_exclusions(
         exclusionType=exclusion_type,
         exclusionProgram=exclusion_program,
         page=page,
-        pageSize=page_size,
+        size=page_size,
     )
-    response = await _get_client().get("/exclusions/v1/", params=params)
+    response = await _get_client().get(
+        "/entity-information/v4/exclusions", params=params
+    )
     response.raise_for_status()
     return response.json()
 
@@ -248,9 +249,9 @@ async def resolve_company(
     Returns the single best match, or an error if none found."""
     params = _params(
         legalBusinessName=name,
-        physicalAddressStateOrProvinceCode=state,
-        samRegistered="Yes",
-        pageSize=5,
+        physicalAddressProvinceOrStateCode=state,
+        registrationStatus="A",
+        size=5,
     )
     response = await _get_client().get("/entity-information/v3/entities", params=params)
     response.raise_for_status()
@@ -274,13 +275,16 @@ async def search_contract_awards(
     recipient_uei: Annotated[
         Optional[str], Field(description="UEI of the award recipient")
     ] = None,
-    agency_id: Annotated[Optional[str], Field(description="Awarding agency ID")] = None,
+    agency_id: Annotated[
+        Optional[str],
+        Field(description="Contracting department code, e.g. 9700 for DoD"),
+    ] = None,
     naics_code: Annotated[Optional[str], Field(description="NAICS code")] = None,
     award_date_from: Annotated[
-        Optional[str], Field(description="Award date from (MM/DD/YYYY)")
+        Optional[str], Field(description="Award approved date from (MM/DD/YYYY)")
     ] = None,
     award_date_to: Annotated[
-        Optional[str], Field(description="Award date to (MM/DD/YYYY)")
+        Optional[str], Field(description="Award approved date to (MM/DD/YYYY)")
     ] = None,
     amount_from: Annotated[
         Optional[float], Field(description="Minimum obligated amount in dollars")
@@ -290,32 +294,42 @@ async def search_contract_awards(
     ] = None,
     contract_type: Annotated[
         Optional[str],
-        Field(
-            description="Contract type, e.g. DEFINITIVE CONTRACT, INDEFINITE DELIVERY CONTRACT"
-        ),
+        Field(description="Contract type name, e.g. PURCHASE ORDER, DELIVERY ORDER"),
     ] = None,
-    page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
-    page_size: Annotated[
+    offset: Annotated[int, Field(description="Pagination offset (0-based)", ge=0)] = 0,
+    limit: Annotated[
         int, Field(description="Results per page (max 100)", ge=1, le=100)
     ] = 10,
 ) -> dict:
     """Search FPDS contract award records — actual awarded contracts, not open solicitations.
     Use recipient_uei to find all contracts awarded to a specific company."""
+    approved_date = None
+    if award_date_from and award_date_to:
+        approved_date = f"[{award_date_from},{award_date_to}]"
+    elif award_date_from:
+        approved_date = award_date_from
+    elif award_date_to:
+        approved_date = award_date_to
+
+    dollars_obligated = None
+    if amount_from is not None and amount_to is not None:
+        dollars_obligated = f"[{amount_from},{amount_to}]"
+    elif amount_from is not None:
+        dollars_obligated = str(amount_from)
+    elif amount_to is not None:
+        dollars_obligated = str(amount_to)
+
     params = _params(
-        recipientUEI=recipient_uei,
-        awardingAgencyId=agency_id,
+        awardeeUniqueEntityId=recipient_uei,
+        contractingDepartmentCode=agency_id,
         naicsCode=naics_code,
-        awardDateFrom=award_date_from,
-        awardDateTo=award_date_to,
-        obligatedAmountFrom=amount_from,
-        obligatedAmountTo=amount_to,
-        contractType=contract_type,
-        page=page,
-        pageSize=page_size,
+        approvedDate=approved_date,
+        dollarsObligated=dollars_obligated,
+        awardOrIDVTypeName=contract_type,
+        offset=offset,
+        limit=limit,
     )
-    response = await _get_client().get(
-        "/contract-data/v2/contractAwards", params=params
-    )
+    response = await _get_client().get("/contract-awards/v1/search", params=params)
     response.raise_for_status()
     return response.json()
 
@@ -330,8 +344,8 @@ async def find_competitors(
     ] = None,
     page_size: Annotated[
         int,
-        Field(description="Number of competitors to return (max 100)", ge=1, le=100),
-    ] = 25,
+        Field(description="Number of competitors to return (max 10)", ge=1, le=10),
+    ] = 10,
 ) -> dict:
     """Find companies registered under the same NAICS codes as the given entity.
     Useful for mapping the competitive landscape around a specific contractor."""
@@ -361,9 +375,9 @@ async def find_competitors(
             "/entity-information/v3/entities",
             params=_params(
                 naicsCode=code,
-                physicalAddressStateOrProvinceCode=state,
-                samRegistered="Yes",
-                pageSize=page_size,
+                physicalAddressProvinceOrStateCode=state,
+                registrationStatus="A",
+                size=page_size,
             ),
         )
         r.raise_for_status()
@@ -398,29 +412,40 @@ async def get_similar_awards(
         Field(description="Number of similar awards to return (max 100)", ge=1, le=100),
     ] = 10,
 ) -> dict:
-    """Given a contract ID, find other awarded contracts with the same NAICS code,
+    """Given a contract PIID, find other awarded contracts with the same NAICS code,
     awarding agency, and set-aside type."""
     award_resp = await _get_client().get(
-        "/contract-data/v2/contractAwards",
-        params=_params(awardId=contract_id, pageSize=1),
+        "/contract-awards/v1/search",
+        params=_params(piid=contract_id, limit=1),
     )
     award_resp.raise_for_status()
-    awards = award_resp.json().get("contractAwardsData", [])
+    awards = award_resp.json().get("awardSummary", [])
     if not awards:
         return {"error": f"No award found for contract ID '{contract_id}'"}
 
     ref = awards[0]
-    naics_code = ref.get("naicsCode")
-    agency_id = ref.get("awardingAgencyId")
-    set_aside = ref.get("typeOfSetAside")
+    core = ref.get("coreData", {})
+    principal_naics = core.get("productOrServiceInformation", {}).get(
+        "principalNaics", []
+    )
+    naics_code = principal_naics[0].get("code") if principal_naics else None
+    agency_code = (
+        core.get("federalOrganization", {})
+        .get("contractingInformation", {})
+        .get("contractingDepartment", {})
+        .get("code")
+    )
+    set_aside_code = (
+        core.get("competitionInformation", {}).get("typeOfSetAside", {}).get("code")
+    )
 
     similar_resp = await _get_client().get(
-        "/contract-data/v2/contractAwards",
+        "/contract-awards/v1/search",
         params=_params(
             naicsCode=naics_code,
-            awardingAgencyId=agency_id,
-            typeOfSetAside=set_aside,
-            pageSize=page_size,
+            contractingDepartmentCode=agency_code,
+            typeOfSetAsideCode=set_aside_code,
+            limit=page_size,
         ),
     )
     similar_resp.raise_for_status()
@@ -429,8 +454,8 @@ async def get_similar_awards(
         "reference_contract": contract_id,
         "matched_on": {
             "naics_code": naics_code,
-            "agency_id": agency_id,
-            "set_aside": set_aside,
+            "agency_code": agency_code,
+            "set_aside_code": set_aside_code,
         },
         "similar_awards": similar_resp.json(),
     }
@@ -454,8 +479,8 @@ async def get_company_profile(
             params=_params(ueiSAM=uei),
         ),
         _get_client().get(
-            "/contract-data/v2/contractAwards",
-            params=_params(recipientUEI=uei, pageSize=awards_page_size),
+            "/contract-awards/v1/search",
+            params=_params(awardeeUniqueEntityId=uei, limit=awards_page_size),
         ),
         _get_client().get(
             "/contract-data/v2/subAwards",
