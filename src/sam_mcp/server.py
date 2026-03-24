@@ -44,7 +44,7 @@ async def search_entities(
         Optional[str], Field(description="Country code, e.g. USA")
     ] = None,
     registration_status: Annotated[
-        Optional[str], Field(description="Active, Inactive, or All (default Active)")
+        Optional[str], Field(description="A=Active or E=Expired")
     ] = None,
     page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
     page_size: Annotated[
@@ -52,6 +52,7 @@ async def search_entities(
     ] = 10,
 ) -> dict:
     """Search for registered entities (vendors/organizations) in SAM.gov."""
+    # Docs: https://open.gsa.gov/api/entity-api/
     params = _params(
         ueiSAM=uei,
         legalBusinessName=legal_business_name,
@@ -74,6 +75,7 @@ async def get_entity(
     ],
 ) -> dict:
     """Get detailed information for a specific entity by UEI."""
+    # Docs: https://open.gsa.gov/api/entity-api/
     params = _params(ueiSAM=uei)
     response = await _get_client().get("/entity-information/v3/entities", params=params)
     response.raise_for_status()
@@ -86,22 +88,33 @@ async def get_entity(
 
 @mcp.tool()
 async def search_opportunities(
-    keyword: Annotated[Optional[str], Field(description="Keyword search term")] = None,
+    posted_from: Annotated[
+        str,
+        Field(
+            description="Posted from date (MM/DD/YYYY) — required by API, max 1-year range"
+        ),
+    ],
+    posted_to: Annotated[
+        str,
+        Field(
+            description="Posted to date (MM/DD/YYYY) — required by API, max 1-year range"
+        ),
+    ],
+    title: Annotated[
+        Optional[str], Field(description="Opportunity title search term")
+    ] = None,
     opportunity_type: Annotated[
         Optional[str],
         Field(
             description="Type codes: p=presolicitation, o=solicitation, k=combined synopsis, etc."
         ),
     ] = None,
-    posted_from: Annotated[
-        Optional[str], Field(description="Posted from date (MM/DD/YYYY)")
+    naics_code: Annotated[
+        Optional[str], Field(description="NAICS code (max 6 digits)")
     ] = None,
-    posted_to: Annotated[
-        Optional[str], Field(description="Posted to date (MM/DD/YYYY)")
-    ] = None,
-    naics_code: Annotated[Optional[str], Field(description="NAICS code")] = None,
     set_aside_code: Annotated[
-        Optional[str], Field(description="Set-aside type, e.g. SBA, 8A, HZC, etc.")
+        Optional[str],
+        Field(description="Set-aside type, e.g. SBA, 8A, HZC, SDVOSBC, WOSB, etc."),
     ] = None,
     state: Annotated[
         Optional[str],
@@ -113,8 +126,10 @@ async def search_opportunities(
     offset: Annotated[int, Field(description="Offset for pagination", ge=0)] = 0,
 ) -> dict:
     """Search for contract opportunities (solicitations) on SAM.gov."""
+    # Docs: https://open.gsa.gov/api/get-opportunities-public-api/
+    # Note: postedFrom and postedTo are required by the API (MM/DD/YYYY, max 1-year range)
     params = _params(
-        q=keyword,
+        title=title,
         ptype=opportunity_type,
         postedFrom=posted_from,
         postedTo=posted_to,
@@ -141,10 +156,12 @@ async def search_exclusions(
     ] = None,
     exclusion_type: Annotated[
         Optional[str],
-        Field(description="Ineligible Firm, Prohibition/Restriction, or Reciprocal"),
+        Field(
+            description="Ineligible (Proceedings Pending), Ineligible (Proceedings Completed), Prohibition/Restriction, or Voluntary Exclusion"
+        ),
     ] = None,
     exclusion_program: Annotated[
-        Optional[str], Field(description="Non-Procurement or Procurement")
+        Optional[str], Field(description="Procurement, NonProcurement, or Reciprocal")
     ] = None,
     page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
     page_size: Annotated[
@@ -152,6 +169,8 @@ async def search_exclusions(
     ] = 10,
 ) -> dict:
     """Search for excluded parties (debarred/suspended entities) on SAM.gov."""
+    # Docs: https://open.gsa.gov/api/exclusions-api/
+    # Note: v1/v2/v3 are retired; v4 is current as of September 2024
     params = _params(
         exclusionName=name,
         cageCode=cage_code,
@@ -170,69 +189,134 @@ async def search_exclusions(
 
 @mcp.tool()
 async def search_subawards(
-    prime_uei: Annotated[
-        Optional[str],
-        Field(description="UEI of the prime contractor — returns their subcontractors"),
-    ] = None,
-    sub_uei: Annotated[
+    piid: Annotated[
         Optional[str],
         Field(
-            description="UEI of the subcontractor — returns primes they worked under"
+            description="Prime contract PIID — retrieves all subawards under that contract"
         ),
     ] = None,
-    prime_award_id: Annotated[
+    prime_contract_key: Annotated[
         Optional[str],
         Field(
-            description="Prime contract/award ID to scope results to a specific contract"
+            description="Business key identifying subawards under a specific prime contract"
         ),
     ] = None,
-    page: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
+    agency_id: Annotated[
+        Optional[str],
+        Field(description="Numeric agency ID of the contracting agency"),
+    ] = None,
+    referenced_idv_piid: Annotated[
+        Optional[str],
+        Field(description="Referenced IDV PIID to filter by contract family"),
+    ] = None,
+    prime_award_type: Annotated[
+        Optional[str],
+        Field(description="Type of prime award"),
+    ] = None,
+    from_date: Annotated[
+        Optional[str],
+        Field(description="Start date filter (YYYY-MM-DD)"),
+    ] = None,
+    to_date: Annotated[
+        Optional[str],
+        Field(description="End date filter (YYYY-MM-DD)"),
+    ] = None,
+    page_number: Annotated[int, Field(description="Page number (0-based)", ge=0)] = 0,
     page_size: Annotated[
-        int, Field(description="Results per page (max 100)", ge=1, le=100)
-    ] = 10,
+        int, Field(description="Results per page (max 1000)", ge=1, le=1000)
+    ] = 100,
 ) -> dict:
-    """Search FSRS subcontract reports. Use prime_uei to find a company's subcontractors,
-    or sub_uei to find the prime contractors a company has worked under."""
+    """Search FSRS subcontract reports by contract PIID, agency, award type, or date range.
+    Note: filtering by prime or sub entity UEI is not supported by this API —
+    use search_contract_awards to find contracts by recipient UEI instead."""
+    # Docs: https://open.gsa.gov/api/acquisition-subaward-reporting-api/
     params = _params(
-        primeEntityUEI=prime_uei,
-        subEntityUEI=sub_uei,
-        primeAwardKey=prime_award_id,
-        page=page,
+        PIID=piid,
+        primeContractKey=prime_contract_key,
+        agencyId=agency_id,
+        referencedIdvPIID=referenced_idv_piid,
+        primeAwardType=prime_award_type,
+        fromDate=from_date,
+        toDate=to_date,
+        pageNumber=page_number,
         pageSize=page_size,
     )
-    response = await _get_client().get("/contract-data/v2/subAwards", params=params)
+    response = await _get_client().get(
+        "/prod/contract/v1/subcontracts/search", params=params
+    )
     response.raise_for_status()
     return response.json()
 
 
-@mcp.tool()
-async def get_company_partners(
-    uei: Annotated[str, Field(description="UEI of the company to look up")],
+# TODO: Re-enable once subaward PIID filter is verified against live API.
+# Live testing with a public key confirmed that the PIID param does not filter
+# results — all 2.6M subaward records are returned regardless of value.
+# Needs retesting with a system account key to rule out rate-limit interference.
+# @mcp.tool()
+async def get_subawards_by_prime(
+    uei: Annotated[str, Field(description="UEI of the prime contractor")],
+    max_contracts: Annotated[
+        int,
+        Field(
+            description="Number of recent prime contracts to check (max 5)", ge=1, le=5
+        ),
+    ] = 3,
     page_size: Annotated[
         int,
-        Field(description="Results per page for each query (max 100)", ge=1, le=100),
-    ] = 25,
+        Field(description="Subaward results per contract (max 1000)", ge=1, le=1000),
+    ] = 100,
 ) -> dict:
-    """Return a unified view of a company's subcontract partnerships:
-    - as_prime: companies they have brought on as subcontractors
-    - as_sub: prime contractors they have worked under"""
-    prime_resp, sub_resp = await asyncio.gather(
-        _get_client().get(
-            "/contract-data/v2/subAwards",
-            params=_params(primeEntityUEI=uei, pageSize=page_size),
-        ),
-        _get_client().get(
-            "/contract-data/v2/subAwards",
-            params=_params(subEntityUEI=uei, pageSize=page_size),
-        ),
+    """Find subaward reports under contracts where this entity is the prime awardee.
+
+    WARNING: Uses 1 + max_contracts API calls per invocation. Users with public
+    API access (10 calls/day) should set max_contracts=1 or avoid this tool.
+    System account keys (10,000 calls/day) are recommended for regular use.
+
+    Note: finding subawards where this entity is the *subcontractor* is not
+    supported by the public SAM.gov API — use the SAM.gov web UI for that."""
+    # Docs: https://open.gsa.gov/api/contract-awards/ (prime awards)
+    #       https://open.gsa.gov/api/acquisition-subaward-reporting-api/ (subawards)
+
+    # Step 1: find recent prime contracts for this entity
+    awards_resp = await _get_client().get(
+        "/contract-awards/v1/search",
+        params=_params(awardeeUniqueEntityId=uei, limit=max_contracts),
     )
-    prime_resp.raise_for_status()
-    sub_resp.raise_for_status()
+    awards_resp.raise_for_status()
+    award_summaries = awards_resp.json().get("awardSummary", [])
+    if not award_summaries:
+        return {"error": f"No prime contracts found for UEI {uei}"}
+
+    piids = [
+        a.get("contractId", {}).get("piid")
+        for a in award_summaries
+        if a.get("contractId", {}).get("piid")
+    ]
+    if not piids:
+        return {"error": "Could not extract PIIDs from contract awards response"}
+
+    # Step 2: look up subawards for each PIID in parallel
+    # TODO: PIID filter param unconfirmed — live testing showed it may not filter correctly.
+    #       Verify against API with a system account key before relying on these results.
+    sub_resps = await asyncio.gather(
+        *[
+            _get_client().get(
+                "/prod/contract/v1/subcontracts/search",
+                params=_params(PIID=piid, pageSize=page_size),
+            )
+            for piid in piids
+        ]
+    )
+
+    results = []
+    for piid, resp in zip(piids, sub_resps):
+        resp.raise_for_status()
+        results.append({"piid": piid, "subawards": resp.json()})
 
     return {
         "uei": uei,
-        "as_prime": prime_resp.json(),
-        "as_sub": sub_resp.json(),
+        "contracts_checked": len(piids),
+        "results": results,
     }
 
 
@@ -247,6 +331,7 @@ async def resolve_company(
 ) -> dict:
     """Resolve a company name to its SAM.gov entity record and UEI.
     Returns the single best match, or an error if none found."""
+    # Docs: https://open.gsa.gov/api/entity-api/
     params = _params(
         legalBusinessName=name,
         physicalAddressProvinceOrStateCode=state,
@@ -303,6 +388,7 @@ async def search_contract_awards(
 ) -> dict:
     """Search FPDS contract award records — actual awarded contracts, not open solicitations.
     Use recipient_uei to find all contracts awarded to a specific company."""
+    # Docs: https://open.gsa.gov/api/contract-awards/
     approved_date = None
     if award_date_from and award_date_to:
         approved_date = f"[{award_date_from},{award_date_to}]"
@@ -349,6 +435,7 @@ async def find_competitors(
 ) -> dict:
     """Find companies registered under the same NAICS codes as the given entity.
     Useful for mapping the competitive landscape around a specific contractor."""
+    # Docs: https://open.gsa.gov/api/entity-api/
     entity_resp = await _get_client().get(
         "/entity-information/v3/entities",
         params=_params(ueiSAM=uei),
@@ -414,6 +501,7 @@ async def get_similar_awards(
 ) -> dict:
     """Given a contract PIID, find other awarded contracts with the same NAICS code,
     awarding agency, and set-aside type."""
+    # Docs: https://open.gsa.gov/api/contract-awards/
     award_resp = await _get_client().get(
         "/contract-awards/v1/search",
         params=_params(piid=contract_id, limit=1),
@@ -467,13 +555,12 @@ async def get_company_profile(
     awards_page_size: Annotated[
         int, Field(description="Number of contract awards to include", ge=1, le=100)
     ] = 10,
-    partners_page_size: Annotated[
-        int, Field(description="Number of subaward records per direction", ge=1, le=100)
-    ] = 10,
 ) -> dict:
-    """Full profile of a company: entity registration details, contract awards,
-    and subcontract partnerships — all in a single call."""
-    entity_resp, awards_resp, sub_as_prime_resp, sub_as_sub_resp = await asyncio.gather(
+    """Full profile of a company: entity registration details and contract awards
+    in a single call."""
+    # Docs: https://open.gsa.gov/api/entity-api/ (entity)
+    #       https://open.gsa.gov/api/contract-awards/ (awards)
+    entity_resp, awards_resp = await asyncio.gather(
         _get_client().get(
             "/entity-information/v3/entities",
             params=_params(ueiSAM=uei),
@@ -482,27 +569,15 @@ async def get_company_profile(
             "/contract-awards/v1/search",
             params=_params(awardeeUniqueEntityId=uei, limit=awards_page_size),
         ),
-        _get_client().get(
-            "/contract-data/v2/subAwards",
-            params=_params(primeEntityUEI=uei, pageSize=partners_page_size),
-        ),
-        _get_client().get(
-            "/contract-data/v2/subAwards",
-            params=_params(subEntityUEI=uei, pageSize=partners_page_size),
-        ),
     )
 
-    for r in (entity_resp, awards_resp, sub_as_prime_resp, sub_as_sub_resp):
+    for r in (entity_resp, awards_resp):
         r.raise_for_status()
 
     entities = entity_resp.json().get("entityData", [])
     return {
         "entity": entities[0] if entities else None,
         "contract_awards": awards_resp.json(),
-        "partners": {
-            "as_prime": sub_as_prime_resp.json(),
-            "as_sub": sub_as_sub_resp.json(),
-        },
     }
 
 

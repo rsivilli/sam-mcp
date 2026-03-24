@@ -81,10 +81,10 @@ Add the following to your `claude_desktop_config.json`:
 
 | Tool | Description |
 |---|---|
-| `get_company_profile` | Full profile of a company: entity registration, contract awards, and subcontract partnerships in a single call |
-| `get_company_partners` | Unified view of a company's subcontract relationships — as prime contractor and as subcontractor |
+| `get_company_profile` | Full profile of a company: entity registration and contract awards in a single call |
 | `find_competitors` | Find companies registered under the same NAICS codes as a given entity |
-| `search_subawards` | Search FSRS subcontract reports by prime contract ID or award key |
+| `search_subawards` | Search FSRS subcontract reports by PIID, agency, award type, or date range |
+| `get_subawards_by_prime` | *(disabled — subaward PIID filter unverified against live API; re-enable once confirmed with a system account key)* |
 
 ## API rate limits
 
